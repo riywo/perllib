@@ -206,7 +206,6 @@ sub post {
         response => $response,
         parser   => $self->response_parser
     );
-    $self->__cache_set( [ $uri, @headers ], $response );
     return $response;
 }
 
