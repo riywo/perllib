@@ -173,26 +173,40 @@ sub get {
 }
 
 sub post {
-    my ( $self, $url, @params ) = @_;
+    my $self = shift;
+    my ( $url, %extra );
 
-    # XXX - do not include params
+    if ( ref $_[0] eq 'HASH' ) {
+        $url   = "";
+        %extra = %{ shift @_ };
+    }
+    else {
+        $url = shift @_;
+        if ( ref $_[0] eq 'HASH' ) {
+            %extra = %{ shift @_ };
+        }
+    }
+
     my $uri = $self->request_url(
         url        => $self->base_url,
-        extra_path => $url
+        extra_path => $url,
     );
 
-    # default parameters must come *before* @params, so unshift instead
-    # of push
-    unshift @params, %{ $self->basic_params };
-    my $response = $self->SUPER::post( $uri, @params );
+    warn "Request URL is $uri\n" if $self->{debug};
 
+    my @headers = @_;
+
+    my $response;
+    $response = $self->SUPER::post( $uri, { %{ $self->basic_params }, %extra }, @headers );
     if ( !$response->is_success ) {
         Carp::croak( "request to $url failed: " . $response->status_line );
     }
+
     $response = WebService::Simple::Response->new_from_response(
         response => $response,
         parser   => $self->response_parser
     );
+    $self->__cache_set( [ $uri, @headers ], $response );
     return $response;
 }
 
