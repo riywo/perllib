@@ -1,8 +1,10 @@
 package WebService::Simple::Flickr;
 
-use base qw(WebService::Simple::Signature);
+use Digest::MD5 qw(md5_hex);
+
+use base qw(WebService::Simple);
 __PACKAGE__->config(
-    base_url   => "http://api.flickr.com/services/",
+    base_url   => "http://api.flickr.com/services/rest/",
     upload_url   => "http://api.flickr.com/services/upload/",
     );
 
@@ -31,96 +33,60 @@ sub sign_args {
     foreach my $key (sort {$a cmp $b} keys %{$args}) {
         my $value = (defined($args->{$key})) ? $args->{$key} : "";
         $sig .= $key . $value;
-    } 
-    warn "sig=" . $sig . "\n" if $self->{debug};
-    
+    }
+    print "sig=" . $sig . "\n";
     return md5_hex($sig);
 }
 
 sub get {
-    my $self = shift;
-    my ( $url, %extra );
-    
-    if ( ref $_[0] eq 'HASH' ) {
-        $url   = "";
-        %extra = %{ shift @_ };
-    }
-    else {
-        $url = shift @_;
-        if ( ref $_[0] eq 'HASH' ) {
-            %extra = %{ shift @_ };
-        }
-    }
-    
-    $extra{api_key} = $self->{api_key};
-    %extra = (%{$self->{basic_params}}, %extra);
+    my ($self, $args) = @_;
+    $args->{api_key} = $self->{api_key};
+
     if(defined $self->{api_secret} && length $self->{api_secret}){
         if(defined $self->{auth_token} && length $self->{auth_token}){
-            $extra{auth_token} = $self->{auth_token};
+            $args->{auth_token} = $self->{auth_token};
         }
-        $extra{api_sig} = $self->sign_args(\%extra);
+        $args->{api_sig} = $self->sign_args($args);
     }
-    
-    my @headers = @_;
-    return $self->SUPER::get($url, {%extra}, @headers);
+    return $self->SUPER::get($args);
 }
 
-sub post {
-    my $self = shift;
-    my ( $url, %extra );
+sub upload_post {
+    my ($self, $args) = @_;
+    $args->{api_key} = $self->{api_key};
+    local $self->{base_url} = $self->config->{upload_url};
+
+    my $photo = delete $args->{photo};
     
-    if ( ref $_[0] eq 'HASH' ) {
-        $url   = "";
-        %extra = %{ shift @_ };
-    }
-    else {
-        $url = shift @_;
-        if ( ref $_[0] eq 'HASH' ) {
-            %extra = %{ shift @_ };
-        }
-    }
-    
-    $extra{api_key} = $self->{api_key};
-    my $photo = delete $extra{photo};
-    %extra = (%{$self->{basic_params}}, %extra);
     if(defined $self->{api_secret} && length $self->{api_secret}){
         if(defined $self->{auth_token} && length $self->{auth_token}){
-            $extra{auth_token} = $self->{auth_token};
+            $args->{auth_token} = $self->{auth_token};
         }
-        $extra{api_sig} = $self->sign_args(\%extra);
+        $args->{api_sig} = $self->sign_args($args);
     }
-    
-    my @headers = @_;
-    $extra{photo} = [$photo] if ref $photo ne "ARRAY";
-    return $self->SUPER::post($url, {%extra}, @headers);
+    $args->{photo} = [$photo] if ref $photo ne "ARRAY";
+    return $self->post("", Content_Type => "form-data", Content => $args);
 }
 
 sub request_auth_url {
-    my $self = shift;
-    my ( $url, %extra );
+    my ($self, $perms, $frob) = @_;
     
-    if ( ref $_[0] eq 'HASH' ) {
-        $url   = "";
-        %extra = %{ shift @_ };
+    return undef unless defined $self->{api_secret} && length $self->{api_secret};
+    
+    my %args = (
+        'api_key' => $self->basic_params->{api_key},
+        'perms'   => $perms
+        );
+    
+    if ($frob) {
+        $args{frob} = $frob;
     }
-    else {
-        $url = shift @_;
-        if ( ref $_[0] eq 'HASH' ) {
-            %extra = %{ shift @_ };
-        }
-    }
-
-    $extra{api_key} = $self->{api_key};
-    if(defined $self->{api_secret} && length $self->{api_secret}){
-        $extra{api_sig} = $self->sign_args(\%extra);
-    }
-    my $uri = $self->request_url(
-        url        => $self->base_url,
-        extra_path => $url,
-        params     => {%extra}
-    );
-
-    warn "Request URL is $uri\n" if $self->{debug};
+    
+    my $sig = $self->sign_args(\%args);
+    $args{api_sig} = $sig;
+    
+    my $uri = URI->new('http://flickr.com/services/auth');
+    $uri->query_form(%args);
     
     return $uri;
 }
