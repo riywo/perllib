@@ -193,9 +193,18 @@ sub post {
     );
 
     warn "Request URL is $uri\n" if $self->{debug};
-
+    
     my @headers = @_;
-
+    
+    if(defined $extra{file}){
+        my %file = %{$extra{file}};
+        delete $extra{file};
+        foreach my $key(keys(%file)){
+            $file{$key} = [$file{$key}] if ref $file{$key} ne "ARRAY";
+        }
+        %extra = (%file, %extra);
+    }
+    
     my $response;
     $response = $self->SUPER::post( $uri, { %{ $self->basic_params }, %extra }, @headers );
     if ( !$response->is_success ) {
@@ -276,6 +285,8 @@ If you want to add a path to base URL, use an option parameter.
 =item post(I<[$extra_path,] $args>)
 
 Send POST request.
+## riywo patch
+This is not supporting the cache.
 
 =item request_url(I<$extra_path, $args>)
 
@@ -319,6 +330,18 @@ customize the behavior
     );
   }
 
+##riywo patch
+To use new post method:
+    base_url => "http://api.flickr.com/services/";
+
+    $self->post('upload/',
+                { title => "title", description => "...",
+                  file => {
+                      photo => 'localpath to photo'
+                  }
+                },
+                Content_type => 'form-data'
+        );
 
 =head1 PARSERS
 
